@@ -11,13 +11,15 @@ public class Player : MonoBehaviour
     private int moveCount = 0;
     private int turnCount = 0;
     private int spawnCount = 0;     // 계단 증가 변수
+
+    private bool isDie = false;     // 캐릭터의 생사 유무 판단 
     
     void Start()
     {
         anim = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
-        startPosition = transform.position;
-        oldPosition = transform.localPosition;
+        Init();
+
     }
 
     
@@ -33,6 +35,20 @@ public class Player : MonoBehaviour
         }
     }
 
+    private void Init()
+    {
+        anim.SetBool("Die", false);
+        startPosition = transform.position;
+        oldPosition = transform.localPosition;
+        moveCount = 0;
+        spawnCount = 0;
+        turnCount = 0;
+        isTurn = false;
+        spriteRenderer.flipX = isTurn;
+        isDie = false;
+    }
+    
+    
     
     private void CharTurn()
     {
@@ -50,7 +66,7 @@ public class Player : MonoBehaviour
         // 잘못된 방향으로 가면 사망
         if (isFailTurn())
         {
-            anim.SetBool("Die", true);
+            CharDie();
             return;
         }
 
@@ -104,5 +120,12 @@ public class Player : MonoBehaviour
         {
             spawnCount = 0;
         }
+    }
+
+    // 캐릭터 죽는 모션
+    private void CharDie()
+    {
+        anim.SetBool("Die", true);
+        isDie = true;
     }
 }
