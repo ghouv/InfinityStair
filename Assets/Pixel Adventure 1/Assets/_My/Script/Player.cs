@@ -1,145 +1,125 @@
 using UnityEngine;
+//마우스 클릭과 버튼을 따로 해두고 싶어서 사용
+using UnityEngine.EventSystems;
 
-public class Player : MonoBehaviour
+public class Player : GameEntity
 {
-    private Animator anim;
-    private SpriteRenderer spriteRenderer;
-    private Vector3 startPosition;
-    private Vector3 oldPosition;
-    public bool isTurn = false;
-
+    [SerializeField] private AudioSource sound;
+    [SerializeField] private Animator animator;
+    [SerializeField] private SpriteRenderer spriteRenderer;
+    [SerializeField] private RectTransform timeBar; //시간
+    
+    private bool isTurn = false;
+    private bool isDead = false;
     private int moveCount = 0;
-    private int turnCount = 0;
-    private int spawnCount = 0;     // 계단 증가 변수
+    private int spawnIndex = 0;
+    private int turnIndex = 0;
+    private int score = 0;
 
-    private bool isDie = false;     // 캐릭터의 생사 유무 판단 
+    public int Score => score;
+
+    private float timeLeft = 2f;
+    private float maxTime = 2f;
     
-    private AudioSource sound;
-    
-    void Start()
+    private void Start()
     {
-        anim = GetComponent<Animator>();
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        sound = GetComponent<AudioSource>();
-        
-        //재시작시 처음 위치 귀환
-        startPosition = transform.position;
-        
-        Init();
-        
-
+        ResetPlayer();
     }
 
-    private void Init()
+    // 오버플로우로 터져서 public 변경 후
+    // GameManger 의 Restart() 수정
+    public void ResetPlayer()
     {
-        anim.SetBool("Die", false);
-        transform.position = startPosition;
-        oldPosition = startPosition;
-        moveCount = 0;
-        spawnCount = 0;
-        turnCount = 0;
         isTurn = false;
-        spriteRenderer.flipX = isTurn;
-        isDie = false;
-    }
-    
-    
-    
-    public void CharTurn()
-    {
-        isTurn = isTurn == true ? false : true;
+        isDead = false;
+        moveCount = 0;
+        spawnIndex = 0;
+        turnIndex = 0;
+        score = 0;
+
+        animator.SetBool("Die", false);
+        spriteRenderer.flipX = false;
+        ResetEntityPosition();
         
+        timeLeft = maxTime;
+        if (timeBar != null)
+        {
+            timeBar.localScale = Vector3.one;
+        }
+    }
+
+    public void Turn()
+    {
+        isTurn = !isTurn;
         spriteRenderer.flipX = isTurn;
     }
 
-    public void CharMove()
+    public void Move()
     {
-        //캐릭터 사망시 추가 행동 금지
-        if(isDie)
-            return;
-        
-        //캐릭터 이동 할때 사운드
+        if (isDead) return;
+
         sound.Play();
-        
         moveCount++;
-        
-        MoveDirection();
-        
-        // 잘못된 방향으로 가면 사망
-        if (isFailTurn())
+
+        currentPosition += isTurn ? new Vector3(-0.75f, 0.5f, 0) : new Vector3(0.75f, 0.5f, 0);
+        transform.position = currentPosition;
+        animator.SetTrigger("Move");
+
+        if (GameManager.Instance.StairManager.IsWrongTurn(turnIndex, isTurn))
         {
-            CharDie();
+            Die();
             return;
         }
+
+        turnIndex = (turnIndex + 1) % GameManager.Instance.StairManager.TotalStairs;
 
         if (moveCount > 5)
         {
-            // 계단 스폰
-            RespawnStair();
+            GameManager.Instance.StairManager.SpawnStair(spawnIndex);
+            spawnIndex = (spawnIndex + 1) % GameManager.Instance.StairManager.TotalStairs;
         }
+
+        score++;
+        GameManager.Instance.UpdateScore(score);
+
+        maxTime -= 0.01f;   //한 칸씩 올라 갈 때마다 0.01초씩 시간 감축
+        if (maxTime < 0.5f) maxTime = 0.5f; // 너무 힘들까봐 0.5초 보장
+        timeLeft = maxTime;
         
-        GameManager.Instance.AddScore();
+
     }
 
-    private void MoveDirection()
+    private void Die()
     {
-        if (isTurn) //left
-        {
-            oldPosition += new Vector3(-0.75f, 0.5f, 0);
-        }
-        else
-        {
-            oldPosition += new Vector3(0.75f, 0.5f, 0);
-        }
-
-        transform.position = oldPosition;
-        anim.SetTrigger("Move");
-    }
-
-    private bool isFailTurn()
-    {
-        bool result = false;
-        if (GameManager.Instance.isTurn[turnCount] != isTurn)
-        {
-            result = true;
-        } 
-
-        turnCount++;
-
-        if (turnCount > GameManager.Instance.Stairs.Length - 1) //계단 20개
-        {
-            turnCount = 0;
-        }
-        
-        return result; 
-    }
-
-    private void RespawnStair()
-    {
-        GameManager.Instance.SpawnStair(spawnCount);
-        
-        spawnCount++;
-
-        if (spawnCount > GameManager.Instance.Stairs.Length - 1)
-        {
-            spawnCount = 0;
-        }
-    }
-
-    // 캐릭터 죽는 모션
-    private void CharDie()
-    {
-        //캐릭터 사망시 창 띄우기
+        isDead = true;
+        animator.SetBool("Die", true);
         GameManager.Instance.GameOver();
-        
-        anim.SetBool("Die", true);
-        isDie = true;
     }
 
-    public void ButtonRestart()
+    // 시간 감소 + 사망 
+    private void Update()
     {
-        Init();
-        GameManager.Instance.Init();
-        GameManager.Instance.InitStairs();
+        if (isDead) return;
+
+        if (!EventSystem.current.IsPointerOverGameObject())
+        {
+            if (Input.GetMouseButtonDown(0)) Move();
+            if (Input.GetMouseButtonDown(1)) Turn();
+        }
+        
+        timeLeft -= Time.deltaTime;
+
+        if (timeBar != null)
+        {
+            float ratio = Mathf.Clamp01(timeLeft / maxTime);
+            timeBar.localScale = new Vector3(ratio, 1f, 1f);
+        }
+
+        if (timeLeft <= 0f)
+        {
+            Die();
+        }
+        
     }
+
 }
