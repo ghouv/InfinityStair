@@ -18,8 +18,10 @@ public class Player : GameEntity
 
     public int Score => score;
 
-    private float timeLeft = 2f;
-    private float maxTime = 2f;
+    private const float realMaxTime = 5f;   // 처음 초기 시간 5초 
+    
+    private float timeLeft = realMaxTime; 
+    private float maxTime = realMaxTime;
     
     private void Start()
     {
@@ -41,6 +43,7 @@ public class Player : GameEntity
         spriteRenderer.flipX = false;
         ResetEntityPosition();
         
+        maxTime = realMaxTime;
         timeLeft = maxTime;
         if (timeBar != null)
         {
